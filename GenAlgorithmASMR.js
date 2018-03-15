@@ -44,6 +44,7 @@ function printPop(title, p) {
 function runGen() {
   gens++;
   voted = new Array(population.length).fill(false);
+  childSelected = 0;
 
   var bestSample = 3;
   var luckyFew = 1;
@@ -312,7 +313,7 @@ function preload() {
 }
 
 
-
+var reverb;
 function setup() {
   createCanvas(600,800);
     background(60);
@@ -320,8 +321,16 @@ function setup() {
   textFont(font);
   textAlign(LEFT, TOP);
 
+  reverb = new p5.Reverb();
+  for (var i = 0; i < numberOfSamples; i++) {
+    // soundfile, seconds reverbTime, decayRate of x%
+    reverb.process(samples[i].sound, 4, 5);
+  }
+
   voteMatrix = [];
   for (var i = 0; i < numberOfSamples; i++) {
+
+
     var row = [];
     for (var j = 0; j < numberOfSamples; j++) {
       row.push({all:0,good:0});
