@@ -28,7 +28,36 @@ function Field(size) {
 var field = new Field(8);
 //field.print();
 
-
+function Sample(name) {
+  this.sound = loadSound("samples/" + name + ".wav"),
+  this.name = name,
+  this.allVotes = 0,
+  this.goodVotes = 0,
+  this.vote = function(isGood) {
+    this.allVotes++;
+    if (isGood) {
+      this.goodVotes++;
+    }
+  },
+  this.getScore = function() {
+    return this.allVotes > 0 ? Math.round(100*this.goodVotes/this.allVotes) : 0;
+  },
+  this.pause = function() {
+    this.sound.stop();
+  },
+  this.unpause = function() {
+    this.sound.loop();
+  },
+  this.mute = function() {
+    this.sound.setVolume(0);
+  },
+  this.unmute = function() {
+    this.sound.setVolume(0.8);
+  }
+  this.draw = function(x,y,idx) {
+    text("("+idx+")" + this.name + ": " + this.getScore(), x, y);
+  }
+}
 
 // --------------------------------------------------------------------------------------
 
@@ -42,6 +71,8 @@ function printPop(title, p) {
 }
 
 function runGen() {
+  voted = new Array(population.length).fill(false);
+
   var bestSample = 3;
   var luckyFew = 1;
   var chanceOfMutation = 20
@@ -65,16 +96,20 @@ function mouseClicked() {
   //runGen();
 }
 
+function add(a,b) {return a+b;}
 function fitThree(word) {
-  return word.map(x => x == 3 ? 1 : 0).reduce(function add(a,b) {return a+b;});
+  return word.map(x => x == 3 ? 1 : 0).reduce(add);
+}
+function fitByVotes(word) {
+  return word.map(x => samples[x].getScore()).reduce(add);
 }
 
 function fitness(word) {
-  return fitThree(word);
+  return fitByVotes(word);
 }
 
 function generateAWord() {
-  w = [...Array(4)].map(() => Math.floor(Math.random() * numberOfSounds));
+  w = [...Array(4)].map(() => Math.floor(Math.random() * numberOfSamples));
   return w;
 }
 
@@ -143,7 +178,7 @@ function createChildren(breeders, numberOfChild) {
 
 function mutateWord(word) {
   var indexToMod = Math.floor(Math.random() * word.length);
-  word[indexToMod] = Math.floor(Math.random() * numberOfSounds);
+  word[indexToMod] = Math.floor(Math.random() * numberOfSamples);
   return word;
 }
 
@@ -175,71 +210,120 @@ function keyTyped() {
   if (key == 'n') {
     runGen();
   }
+  if (key == 'i') {
+    for (var i = 0; i < population.length; i++) {
+      console.log(population[i]);
+      console.log(fitByVotes(population[i]));
+    }
+  }
   return false;
 }
+function keyPressed() {
+  if (keyCode === UP_ARROW) {
+    if (!voted[childSelected]) {
+      doVote(true);
+    }
+  }
+  if (keyCode === DOWN_ARROW) {
+    if (!voted[childSelected]) {
+      doVote(false);
+    }
+  }
+  if (keyCode === RIGHT_ARROW) {
+    childSelected = (childSelected+1) % population.length;
+    setSounds();
+  }
+  if (keyCode === LEFT_ARROW) {
+    childSelected = (childSelected-1) % population.length;
+    setSounds();
+  }
+}
 
+function doVote(isGood) {
+  for (var i = 0; i < population[childSelected].length; i++) {
+    //TODO: decide how we're dealing with duplicates
+    samples[population[childSelected][i]].vote(isGood);
+  }
+  voted[childSelected] = true;
+}
 function stopSound() {
   toggleVolume = false;
-  for (var i = 0; i < soundFiles.length; i++) {
-    soundFiles[i].stop();
+  for (var i = 0; i < samples.length; i++) {
+    samples[i].pause();
   }
 }
 function startSound() {
   toggleVolume = true;
-  for (var i = 0; i < soundFiles.length; i++) {
-    soundFiles[i].loop();
+  for (var i = 0; i < samples.length; i++) {
+    samples[i].unpause();
   }
 }
 function setSounds() {
-  for (var i = 0; i < soundFiles.length; i++) {
-    soundFiles[i].setVolume(0);
+  for (var i = 0; i < samples.length; i++) {
+    samples[i].mute()
   }
   for (var i = 0; i < population[childSelected].length; i++) {
-    soundFiles[population[childSelected][i]].setVolume(0.8);
+    samples[population[childSelected][i]].unmute();
   }
 }
 
 // --------------------------------------------------------------------------------------
 
 var toggleVolume = true;
-var soundFiles;
-var numberOfSounds = 1;
+var samples;
+var numberOfSamples = 1;
+var voted = [];
 
 function preload() {
   var names = "abcdefghijklmnopqrs".split("");
-  soundFiles = [];
+  samples = [];
   for (var i = 0; i < names.length; i++) {
-    soundFiles.push(loadSound("samples/" + names[i] + ".wav"));
+    //samples.push(loadSound("samples/" + names[i] + ".wav"));
+    var s = new Sample(names[i]);
+    samples.push(s);
   }
-  numberOfSounds = soundFiles.length;
+  numberOfSamples = samples.length;
+
+  font = loadFont("RobotoMono-Regular.ttf");
 }
 
 function setup() {
-  createCanvas(field.width*field.size+1,
-               field.height*field.size+1);
+  createCanvas(300,800);
   //noStroke();
+  textFont(font);
+
   begin();
 
-  for (var i = 0; i < soundFiles.length; i++) {
-    soundFiles[i].setVolume(0);
-    soundFiles[i].loop();
+  for (var i = 0; i < samples.length; i++) {
+    samples[i].mute();
+    samples[i].unpause();
   }
   setSounds();
+
+  voted = new Array(population.length).fill(false)
 }
 
 function draw() {
-  if (toggleVolume) {
-    background(160);
+  if (!toggleVolume) {
+    background(60);
+  }
+  else if (voted[childSelected]) {
+    background(200);
   }
   else {
-    background(200, 100, 100);
+    background(160);
   }
   fill(0);
-  var sz = 24;
+  var sz = 12;
   textSize(sz);
-  text(childSelected, 10, sz);
+  text("Selected: " + childSelected, 10, sz);
   text(population[childSelected].join(" "), 10, sz*2);
-  for (var i = 0; i < population[childSelected].length; i++) {
-    text(soundFiles[population[childSelected][i]].url, 42, sz*(3+i))
+  text(population[childSelected]
+    .map(x => samples[x].name + ".wav")
+    .join(" | "),
+    10, 3*sz);
+  for (var i = 0; i < samples.length; i++) {
+    samples[i].draw(10, (5+i)*sz, i);
   }
+  text(voted.map(v => v ? "=" : "-").join(" "), 10, (6+numberOfSamples)*sz);
 }
