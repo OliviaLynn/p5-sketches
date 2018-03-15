@@ -1,33 +1,3 @@
-// I don't remember what this was for, tbh. Maybe the beginning of some sort of sequencer?
-
-function Field(size) {
-  this.size = size,
-  this.matrix = function(rows, cols) {
-    var m = [], row = [];
-    while (cols--) row.push(0);
-    while (rows--) m.push(row.slice());
-    return m;
-  }(size, size),
-  this.print = function() {
-    console.log(this.matrix.map(x => x.join(", ")).join("\n"));
-  },
-  this.width = 50,
-  this.height = 50,
-  this.draw = function() {
-    for (var r = 0; r < this.matrix.length; r++) {
-      for (var c = 0; c < this.matrix[r].length; c++) {
-        rect(c*this.width+1,
-             r*this.height+1,
-             this.width-1,
-             this.height-1);
-      }
-    }
-  }
-}
-
-var field = new Field(8);
-//field.print();
-
 function Sample(name) {
   this.sound = loadSound("samples/" + name + ".wav"),
   this.name = name,
@@ -67,15 +37,17 @@ var childSelected = 0;
 
 function printPop(title, p) {
   //console.log(title);
-  console.log(p.map(x => x.join(" ")).join(" | "));
+  console.log(p.map(x => x.map(y=>samples[y].name).join(" ")).join(" | "));
+  console.log(p.map(x => x.map(y=>samples[y].name).sort().join(" ")).join(" | "));
 }
 
 function runGen() {
+  gens++;
   voted = new Array(population.length).fill(false);
 
   var bestSample = 3;
   var luckyFew = 1;
-  var chanceOfMutation = 20
+  var chanceOfMutation = 50
 
   var p = computePerfPopulation(population);
   var pSelect = selectFromPopulation(p, bestSample, luckyFew);
@@ -103,13 +75,29 @@ function fitThree(word) {
 function fitByVotes(word) {
   return word.map(x => samples[x].getScore()).reduce(add);
 }
+function fitByPairs(word) {
+  var score = 0;
+  for (var r = 0; r < voteMatrix.length; r++) {
+    for (var c = 0; c < voteMatrix[0].length; c++) {
+      score += voteMatrix[r][c];
+    }
+  }
+  return score;
+}
 
 function fitness(word) {
-  return fitByVotes(word);
+  return fitByPairs(word);
 }
 
 function generateAWord() {
-  w = [...Array(4)].map(() => Math.floor(Math.random() * numberOfSamples));
+  //w = [...Array(4)].map(() => Math.floor(Math.random() * numberOfSamples));
+  w = [];
+  while (w.length < 4) {
+    var x = Math.floor(Math.random() * numberOfSamples);
+    if (w.indexOf(x) === -1) {
+      w.push(x);
+    }
+  }
   return w;
 }
 
@@ -130,40 +118,55 @@ function computePerfPopulation() {
 }
 
 function shuffleArray(array) {
-  // Durstenfeld shuffle from
-  // https://stackoverflow.com/questions/2450954/how-to-randomize-shuffle-a-javascript-array
+  // Fisher-Yates shuffle from
+  // https://stackoverflow.com/questions/2450954/how-to-randomize-shuffle-a-javascript-array/2450976
   // bc why reinvent the wheel
   // thnx m8
-    for (let i = array.length - 1; i > 0; i--) {
-        let j = Math.floor(Math.random() * (i + 1));
-        [array[i], array[j]] = [array[j], array[i]];
-    }
+  var currentIndex = array.length, temporaryValue, randomIndex;
+  // While there remain elements to shuffle...
+  while (0 !== currentIndex) {
+    // Pick a remaining element...
+    randomIndex = Math.floor(Math.random() * currentIndex);
+    currentIndex -= 1;
+    // And swap it with the current element.
+    temporaryValue = array[currentIndex];
+    array[currentIndex] = array[randomIndex];
+    array[randomIndex] = temporaryValue;
+  }
+  return array;
 }
 
 function selectFromPopulation(populationSorted, bestSample, luckyFew) {
   nextGen = [];
+  console.log("Population: best sample");
   for (var i = 0; i < bestSample; i++) {
+    console.log(letters(populationSorted[i]) + ": " + fitByVotes(populationSorted[i]));
     nextGen.push(populationSorted[i]);
   }
+  console.log("Population: lucky few")
   for (var i = 0; i < luckyFew; i++) {
     var randomIndex = Math.floor(Math.random() * populationSorted.length);
+    console.log(letters(populationSorted[randomIndex]) + ": " + fitByVotes(populationSorted[randomIndex]));
     nextGen.push(populationSorted[randomIndex]);
   }
-  shuffleArray(nextGen);
+  nextGen = shuffleArray(nextGen);
   return nextGen;
 }
 
-function createChild(word1, word2) {
-  child = [];
-  for (var i = 0; i < word1.length; i++) {
-    if (Math.random() < 0.5) {
-      child.push(word1[i]);
-    }
-    else {
-      child.push(word2[i]);
+function letters(word) {
+  return word.map(x => samples[x].name).join("");
+}
+
+function createChild(scene1, scene2) {
+  var scene = scene1.slice(0);
+  for (var i = 0; i < scene2.length; i++) {
+    if (scene.indexOf(scene2[i]) === -1) {
+      scene.push(scene2[i]);
     }
   }
-  return child;
+  var res = shuffleArray(scene).slice(0,4);
+  console.log(letters(scene1)+" + "+letters(scene2)+" = "+letters(res));
+  return res;
 }
 
 function createChildren(breeders, numberOfChild) {
@@ -211,10 +214,7 @@ function keyTyped() {
     runGen();
   }
   if (key == 'i') {
-    for (var i = 0; i < population.length; i++) {
-      console.log(population[i]);
-      console.log(fitByVotes(population[i]));
-    }
+    console.log(voteMatrixToString());
   }
   return false;
 }
@@ -234,7 +234,10 @@ function keyPressed() {
     setSounds();
   }
   if (keyCode === LEFT_ARROW) {
-    childSelected = (childSelected-1) % population.length;
+    childSelected--;
+    if (childSelected < 0) {
+      childSelected = population.length - 1;
+    }
     setSounds();
   }
 }
@@ -245,6 +248,20 @@ function doVote(isGood) {
     samples[population[childSelected][i]].vote(isGood);
   }
   voted[childSelected] = true;
+
+  var scene = population[childSelected];
+  for (var i = 0; i < scene.length; i++) {
+    for (var j = 0; j < scene.length; j++) {
+      if (i != j) {
+        voteMatrix[scene[i]][scene[j]].all++;
+        if (isGood) {
+          voteMatrix[scene[i]][scene[j]].good++;
+        }
+      }
+    }
+  }
+
+
 }
 function stopSound() {
   toggleVolume = false;
@@ -266,6 +283,12 @@ function setSounds() {
     samples[population[childSelected][i]].unmute();
   }
 }
+function voteMatrixToString() {
+    return voteMatrix.map(
+      r=>r.map(o=>o.all == 0? 0 : o.good/o.all).join(", ")
+    ).join("\n");
+
+}
 
 // --------------------------------------------------------------------------------------
 
@@ -273,9 +296,10 @@ var toggleVolume = true;
 var samples;
 var numberOfSamples = 1;
 var voted = [];
+var voteMatrix;
 
 function preload() {
-  var names = "abcdefghijklmnopqrs".split("");
+  var names = "abcdefghijklmnopqrstuvwxy".split("");
   samples = [];
   for (var i = 0; i < names.length; i++) {
     //samples.push(loadSound("samples/" + names[i] + ".wav"));
@@ -287,10 +311,23 @@ function preload() {
   font = loadFont("RobotoMono-Regular.ttf");
 }
 
+
+
 function setup() {
-  createCanvas(300,800);
+  createCanvas(600,800);
+    background(60);
   //noStroke();
   textFont(font);
+  textAlign(LEFT, TOP);
+
+  voteMatrix = [];
+  for (var i = 0; i < numberOfSamples; i++) {
+    var row = [];
+    for (var j = 0; j < numberOfSamples; j++) {
+      row.push({all:0,good:0});
+    }
+    voteMatrix.push(row);
+  }
 
   begin();
 
@@ -304,26 +341,107 @@ function setup() {
 }
 
 function draw() {
+  /*
   if (!toggleVolume) {
-    background(60);
+    background(30);
   }
   else if (voted[childSelected]) {
-    background(200);
+    background(60);
   }
   else {
-    background(160);
+    background(60);
   }
-  fill(0);
+  */
+  noStroke();
+  fill(60);
+  rect(330, 5, 120, 40);
+  fill(255);
   var sz = 12;
   textSize(sz);
-  text("Selected: " + childSelected, 10, sz);
-  text(population[childSelected].join(" "), 10, sz*2);
-  text(population[childSelected]
-    .map(x => samples[x].name + ".wav")
-    .join(" | "),
-    10, 3*sz);
+  text(childSelected + ": " +
+    population[childSelected]
+    .map(x => samples[x].name)
+    .sort()
+    .join(" "),
+    340, 10);
+  text(voted.map(v => v ? "=" : "-").join(" "), 340, 30);
+  //text(voteMatrixToString(), 10, 20*sz);
+  drawSampleGrid();
+  drawVoteGrid();
+  drawGen();
+}
+
+function drawSampleGrid() {
+  var cols = 5;
   for (var i = 0; i < samples.length; i++) {
-    samples[i].draw(10, (5+i)*sz, i);
+    drawSampleBox(Math.floor(i/cols), i%cols, samples[i].name, samples[i].getScore());
   }
-  text(voted.map(v => v ? "=" : "-").join(" "), 10, (6+numberOfSamples)*sz);
+}
+
+function drawSampleBox(r, c, name, score) {
+  var unit = 20;
+  var x0 = 340;
+  var y0 = 50;
+  var m = 2;
+  var x = x0+unit*c;
+  var y = y0+unit*r;
+  noStroke();
+  fill(150+(score));
+  rect(x, y, unit-m, unit-m);
+  fill(80);
+  textSize(8);
+  text(name, x+2, y-1);
+  text(score, x+2, y-1+8);
+  noStroke();
+}
+
+function drawVoteGrid() {
+  for (var i = 0; i < voteMatrix.length; i++) {
+    for (var j = 0; j < voteMatrix[0].length; j++) {
+      drawVoteBox(i,j);
+    }
+  }
+}
+
+function drawVoteBox(r,c) {
+  var unit = 13;
+  var x0 = 10;
+  var y0 = 10;
+  var m = 2;
+  var x = x0+unit*c;
+  var y = y0+unit*r;
+  var score = voteMatrix[r][c].all == 0 ? 0 : voteMatrix[r][c].good / voteMatrix[r][c].all;
+  noStroke();
+  fill(100+(score*150));
+  rect(x, y, unit-m, unit-m);
+  fill(80);
+  //textSize(12);
+  //text(score, x+2, y-1);
+  noStroke();
+}
+
+var gens = 0;
+function drawGen() {
+  for (var i = 0; i < population.length; i++) {
+    drawGenBox(i);
+  }
+}
+function drawGenBox(i) {
+  var x0 = 10;
+  var y0 = 340;
+  var w = 41;
+  var h = 20;
+  var m = 2;
+  y0 += gens*(h+m);
+  fill(100);
+  noStroke();
+  if (i === 0) {
+    rect(x0+w*i, y0, w-m-3, h);
+  }
+  else {
+    rect(x0+w*i-3, y0, w-m, h);
+  }
+  fill(60);
+  textSize(10);
+  text(population[i].map(x=>samples[x].name).sort().join(""), x0+w*i+4, y0+2);
 }
